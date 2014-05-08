@@ -85,6 +85,10 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "gettxout", 1 },
     { "gettxout", 2 },
     { "gettxoutproof", 0 },
+    { "listallunspent", 1 },
+    { "listallunspent", 2 },
+    { "listallunspent", 3 },
+    { "listallunspent", 4 },
     { "lockunspent", 0 },
     { "lockunspent", 1 },
     { "importprivkey", 2 },
@@ -162,4 +166,3 @@ UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::s
 
     return params;
 }
-
