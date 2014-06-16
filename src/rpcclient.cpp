@@ -46,6 +46,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listreceivedbyaccount", 2 },
     { "getbalance", 1 },
     { "getbalance", 2 },
+    { "getallbalance", 1 },
+    { "getallbalance", 2 },
     { "getblockhash", 0 },
     { "move", 2 },
     { "move", 3 },
