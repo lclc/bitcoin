@@ -27,6 +27,9 @@
 #include <boost/filesystem/fstream.hpp>
 #include <boost/thread.hpp>
 
+#include "core_io.h"
+#include <hiredis/hiredis.h>
+
 using namespace boost;
 using namespace std;
 
@@ -37,6 +40,8 @@ using namespace std;
 /**
  * Global state
  */
+
+redisContext *redisLockTime;
 
 CCriticalSection cs_main;
 
@@ -515,6 +520,13 @@ void RegisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.SendMessages.connect(&SendMessages);
     nodeSignals.InitializeNode.connect(&InitializeNode);
     nodeSignals.FinalizeNode.connect(&FinalizeNode);
+
+    LogPrint("locktime", "Redis connect..\n");
+    redisLockTime = redisConnect("127.0.0.1", 6379);
+    if (redisLockTime != NULL && redisLockTime->err) {
+        printf("Redis Connection Error: %s\n", redisLockTime->errstr);
+        assert(false);
+    }
 }
 
 void UnregisterNodeSignals(CNodeSignals& nodeSignals)
@@ -524,6 +536,9 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.SendMessages.disconnect(&SendMessages);
     nodeSignals.InitializeNode.disconnect(&InitializeNode);
     nodeSignals.FinalizeNode.disconnect(&FinalizeNode);
+
+    LogPrint("locktime", "Redis disconnect..\n");
+    redisFree(redisLockTime);
 }
 
 CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& locator)
