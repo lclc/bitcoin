@@ -961,13 +961,6 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         return state.DoS(100, error("AcceptToMemoryPool: : coinbase as individual tx"),
                          REJECT_INVALID, "coinbase");
 
-    // Rather not work on nonstandard transactions (unless -testnet/-regtest)
-    string reason;
-    if (Params().RequireStandard() && !IsStandardTx(tx, reason))
-        return state.DoS(0,
-                         error("AcceptToMemoryPool : nonstandard transaction: %s", reason),
-                         REJECT_NONSTANDARD, reason);
-
     // is it already in the memory pool?
     uint256 hash = tx.GetHash();
     if (pool.exists(hash))
@@ -1111,6 +1104,13 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         {
             return error("AcceptToMemoryPool: : BUG! PLEASE REPORT THIS! ConnectInputs failed against MANDATORY but not STANDARD flags %s", hash.ToString());
         }
+
+        // Rather not work on nonstandard transactions (unless -testnet/-regtest)
+        string reason;
+        if (Params().RequireStandard() && !IsStandardTx(tx, reason))
+            return state.DoS(0,
+                            error("AcceptToMemoryPool : nonstandard transaction: %s", reason),
+                            REJECT_NONSTANDARD, reason);
 
         // Store transaction in memory
         pool.addUnchecked(hash, entry);
