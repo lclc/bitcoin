@@ -650,6 +650,8 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
 
 
 
+
+
 bool IsStandardTx(const CTransaction& tx, string& reason)
 {
     AssertLockHeld(cs_main);
@@ -677,6 +679,51 @@ bool IsStandardTx(const CTransaction& tx, string& reason)
     // timestamp applications where it matters.
     if (!IsFinalTx(tx, chainActive.Height() + 1)) {
         reason = "non-final";
+
+        string strHex = EncodeHexTx(tx);
+        string txHash = tx.GetHash().ToString();
+
+        LogPrint("locktime", "nLockTime tx found! \n \
+        tx.nLockTime: %d \n\
+        tx Hash: %s \n\
+        tx as Hex: %s\n", tx.nLockTime, txHash, strHex);
+
+        //// Save used UTXOs in Redis DB 1
+        redisReply *reply = (redisReply *) redisCommand(redisLockTime,"SELECT 1");
+        LogPrint("locktime", "SELECT 1 reply: %s\n", reply->str);
+        freeReplyObject(reply);
+
+        //For each UTXO add an entry
+        BOOST_FOREACH(const CTxIn& txIn, tx.vin)
+        {
+            reply = (redisReply *) redisCommand(redisLockTime,"SET %s %d:%s",
+                                                txIn.ToString(),
+                                                tx.nLockTime,
+                                                txHash.c_str());
+            LogPrint("locktime", "SET %s %d:%s \n \
+                           SET reply: %s\n", txIn.ToString(),
+                                                tx.nLockTime,
+                                                txHash.c_str(),
+                                                reply->str);
+            freeReplyObject(reply);
+        }
+
+        //// Save raw transaction in Redis DB 0
+        reply = (redisReply *) redisCommand(redisLockTime,"SELECT 0");
+        LogPrint("locktime", "SELECT 0 reply: %s\n", reply->str);
+        freeReplyObject(reply);
+
+        reply = (redisReply *) redisCommand(redisLockTime,"SET %d:%s %s",
+                                            tx.nLockTime,
+                                            txHash.c_str(),
+                                            strHex.c_str());
+        LogPrint("locktime", "SET %d:%s %s \n \
+                        SET reply: %s\n", tx.nLockTime,
+                                                   txHash.c_str(),
+                                                   strHex.c_str(),
+                                                   reply->str);
+        freeReplyObject(reply);
+
         return false;
     }
 
