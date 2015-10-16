@@ -14,6 +14,8 @@
 #include "txmempool.h"
 #include "utilstrencodings.h"
 #include "version.h"
+#include "core_io.h"
+#include "consensus/validation.h"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/dynamic_bitset.hpp>
@@ -354,49 +356,128 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
     std::string hashStr;
     const RetFormat rf = ParseDataFormat(hashStr, strURIPart);
 
-    uint256 hash;
-    if (!ParseHashStr(hashStr, hash))
-        return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
+    switch (req->GetRequestMethod()) {
+        case HTTPRequest::GET: {
+            uint256 hash;
+            if (!ParseHashStr(hashStr, hash))
+                return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
 
-    CTransaction tx;
-    uint256 hashBlock = uint256();
-    if (!GetTransaction(hash, tx, hashBlock, true))
-        return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
+            CTransaction tx;
+            uint256 hashBlock = uint256();
+            if (!GetTransaction(hash, tx, hashBlock, true))
+                return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
 
-    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
-    ssTx << tx;
+            CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+            ssTx << tx;
 
-    switch (rf) {
-    case RF_BINARY: {
-        string binaryTx = ssTx.str();
-        req->WriteHeader("Content-Type", "application/octet-stream");
-        req->WriteReply(HTTP_OK, binaryTx);
-        return true;
+            switch (rf) {
+            case RF_BINARY: {
+                string binaryTx = ssTx.str();
+                req->WriteHeader("Content-Type", "application/octet-stream");
+                req->WriteReply(HTTP_OK, binaryTx);
+                return true;
+            }
+
+            case RF_HEX: {
+                string strHex = HexStr(ssTx.begin(), ssTx.end()) + "\n";
+                req->WriteHeader("Content-Type", "text/plain");
+                req->WriteReply(HTTP_OK, strHex);
+                return true;
+            }
+
+            case RF_JSON: {
+                UniValue objTx(UniValue::VOBJ);
+                TxToJSON(tx, hashBlock, objTx);
+                string strJSON = objTx.write() + "\n";
+                req->WriteHeader("Content-Type", "application/json");
+                req->WriteReply(HTTP_OK, strJSON);
+                return true;
+            }
+
+            default: {
+                return RESTERR(req, HTTP_NOT_FOUND, "Output format not found (available: " + AvailableDataFormatsString() + ")");
+            }
+            }
+        }
+        case HTTPRequest::POST: {
+            std::string strBody= req->ReadBody();
+            std::vector<std::string> strTx;
+            boost::split(strTx, strBody, boost::is_any_of("="));
+            if(strTx.size() != 2 || strTx.front() != "transaction")
+                return RESTERR(req, HTTP_BAD_REQUEST, "No transaction parameter found");
+
+            // parse parameter
+            CTransaction tx;
+            if(rf == RF_BINARY)
+            {
+                CDataStream bin(SER_NETWORK, PROTOCOL_VERSION);
+                bin << strTx.at(1);
+                try {
+                    bin >> tx;
+                }
+                catch (const std::exception&) {
+                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx.at(1)));
+                }
+            }
+            else
+            {
+                if (!DecodeHexTx(tx, strTx.at(1)))
+                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx.at(1)));
+            }
+            uint256 hashTx = tx.GetHash();
+
+            bool fRejectAbsurdFee = false;
+
+            CCoinsViewCache &view = *pcoinsTip;
+            const CCoins* existingCoins = view.AccessCoins(hashTx);
+            bool fHaveMempool = mempool.exists(hashTx);
+            bool fHaveChain = existingCoins && existingCoins->nHeight < 1000000000;
+            if (!fHaveMempool && !fHaveChain) {
+                // push to local node and sync with wallets
+                CValidationState state;
+                bool fMissingInputs;
+                if (!AcceptToMemoryPool(mempool, state, tx, false, &fMissingInputs, fRejectAbsurdFee)) {
+                    if (state.IsInvalid()) {
+                        return RESTERR(req, HTTP_BAD_REQUEST, strprintf("%i: %s", state.GetRejectCode(), state.GetRejectReason()));
+                    } else {
+                        if (fMissingInputs) {
+                            return RESTERR(req, HTTP_BAD_REQUEST, "Missing inputs");
+                        }
+                        return RESTERR(req, HTTP_BAD_REQUEST, state.GetRejectReason());
+                    }
+                }
+            } else if (fHaveChain) {
+                return RESTERR(req, HTTP_BAD_REQUEST, "Transaction already in block chain");
+            }
+            RelayTransaction(tx);
+
+            switch (rf) {
+                case RF_BINARY: {
+                    req->WriteHeader("Content-Type", "application/octet-stream");
+                    req->WriteReply(HTTP_OK, strprintf("%c", hashTx.begin()));
+                    return true;
+                }
+                case RF_HEX: {
+                    req->WriteHeader("Content-Type", "text/plain");
+                    req->WriteReply(HTTP_OK, hashTx.GetHex() + "\n");
+                    return true;
+                }
+                case RF_JSON: {
+                    req->WriteHeader("Content-Type", "application/json");
+                    req->WriteReply(HTTP_OK, strprintf("{ \"txid\" : \"%s\" }", hashTx.GetHex()));
+                    return true;
+                }
+                default: {
+                    return RESTERR(req, HTTP_NOT_FOUND, "Output format not found (available: .bin, .hex, .json)");
+                }
+            }
+        }
+        default: {
+            return RESTERR(req, HTTP_BAD_REQUEST, "Request Method not supported");
+        }
     }
-
-    case RF_HEX: {
-        string strHex = HexStr(ssTx.begin(), ssTx.end()) + "\n";
-        req->WriteHeader("Content-Type", "text/plain");
-        req->WriteReply(HTTP_OK, strHex);
-        return true;
-    }
-
-    case RF_JSON: {
-        UniValue objTx(UniValue::VOBJ);
-        TxToJSON(tx, hashBlock, objTx);
-        string strJSON = objTx.write() + "\n";
-        req->WriteHeader("Content-Type", "application/json");
-        req->WriteReply(HTTP_OK, strJSON);
-        return true;
-    }
-
-    default: {
-        return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
-    }
-    }
-
     // not reached
-    return true; // continue to process further HTTP reqs on this cxn
+    return true;
 }
 
 static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
@@ -600,6 +681,7 @@ static const struct {
     bool (*handler)(HTTPRequest* req, const std::string& strReq);
 } uri_prefixes[] = {
       {"/rest/tx/", rest_tx},
+      {"/rest/tx", rest_tx},
       {"/rest/block/notxdetails/", rest_block_notxdetails},
       {"/rest/block/", rest_block_extended},
       {"/rest/chaininfo", rest_chaininfo},
