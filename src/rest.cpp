@@ -400,29 +400,30 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
             }
         }
         case HTTPRequest::POST: {
-            std::string strBody= req->ReadBody();
-            std::vector<std::string> strTx;
-            boost::split(strTx, strBody, boost::is_any_of("="));
-            if(strTx.size() != 2 || strTx.front() != "transaction")
+            std::string strBody = req->ReadBody();
+            if (std::string::npos == strBody.find("transaction="))
+            {
                 return RESTERR(req, HTTP_BAD_REQUEST, "No transaction parameter found");
+            }
+            std::string strTx = strBody.substr(std::string("transaction=").length());
 
             // parse parameter
             CTransaction tx;
             if(rf == RF_BINARY)
             {
                 CDataStream bin(SER_NETWORK, PROTOCOL_VERSION);
-                bin << strTx.at(1);
+                bin << strTx;
                 try {
                     bin >> tx;
                 }
                 catch (const std::exception&) {
-                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx.at(1)));
+                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx));
                 }
             }
             else
             {
-                if (!DecodeHexTx(tx, strTx.at(1)))
-                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx.at(1)));
+                if (!DecodeHexTx(tx, strTx))
+                    return RESTERR(req, HTTP_BAD_REQUEST, strprintf("TX decode failed %s",strTx));
             }
             uint256 hashTx = tx.GetHash();
 
@@ -468,7 +469,7 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
                     return true;
                 }
                 default: {
-                    return RESTERR(req, HTTP_NOT_FOUND, "Output format not found (available: .bin, .hex, .json)");
+                    return RESTERR(req, HTTP_BAD_REQUEST, "Output format not found (available: .bin, .hex, .json)");
                 }
             }
         }
