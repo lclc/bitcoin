@@ -148,7 +148,7 @@ UniValue searchrawtransactions(const UniValue& params, bool fHelp)
     std::set<CExtDiskTxPos>::const_iterator it = setpos.begin();
     while (it != setpos.end() && nSkip--) it++;
 
-    Array result;
+    UniValue result(UniValue::VARR);
     while (it != setpos.end() && nCount--) {
         CTransaction tx;
         uint256 hashBlock;
@@ -158,7 +158,7 @@ UniValue searchrawtransactions(const UniValue& params, bool fHelp)
         ssTx << tx;
         string strHex = HexStr(ssTx.begin(), ssTx.end());
         if (fVerbose) {
-            Object object;
+            UniValue object(UniValue::VOBJ);
             TxToJSON(tx, hashBlock, object);
             object.push_back(Pair("hex", strHex));
             result.push_back(object);

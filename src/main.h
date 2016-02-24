@@ -15,6 +15,7 @@
 #include "coins.h"
 #include "net.h"
 #include "script/script_error.h"
+#include "script/standard.h"
 #include "sync.h"
 #include "versionbits.h"
 
