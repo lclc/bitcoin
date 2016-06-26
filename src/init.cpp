@@ -920,7 +920,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     else if (nScriptCheckThreads > MAX_SCRIPTCHECK_THREADS)
         nScriptCheckThreads = MAX_SCRIPTCHECK_THREADS;
 
-    fServer = GetBoolArg("-server", false);
+    fServer = GetBoolArg("-server", true);
 
     // block pruning; get the amount of disk space (in MiB) to allot for block & undo files
     int64_t nSignedPruneTarget = GetArg("-prune", 0) * 1024 * 1024;
@@ -1365,7 +1365,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 }
 
                 // Check for changed -addrindex state
-                if (fAddrIndex != GetBoolArg("-addrindex", false)) {
+                if (fAddrIndex != GetBoolArg("-addrindex", DEFAULT_ADDRINDEX)) {
                     strLoadError = _("You need to rebuild the database using -reindex to change -addrindex");
                     break;
                 }

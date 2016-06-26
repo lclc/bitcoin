@@ -2504,7 +2504,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     if (fTxIndex)
         if (!pblocktree->WriteTxIndex(vPosTxid))
             return AbortNode(state, "Failed to write transaction index");
-    
+
     if (fAddrIndex)
         if (!pblocktree->AddAddrIndex(vPosAddrid))
             return AbortNode(state, "Failed to write address index");
@@ -4049,7 +4049,7 @@ bool LoadBlockIndex()
     return true;
 }
 
-bool InitBlockIndex(const CChainParams& chainparams) 
+bool InitBlockIndex(const CChainParams& chainparams)
 {
     LOCK(cs_main);
 
@@ -4063,7 +4063,7 @@ bool InitBlockIndex(const CChainParams& chainparams)
     // Use the provided setting for -txindex in the new database
     fTxIndex = GetBoolArg("-txindex", DEFAULT_TXINDEX);
     pblocktree->WriteFlag("txindex", fTxIndex);
-    fAddrIndex = GetBoolArg("-addrindex", false);
+    fAddrIndex = GetBoolArg("-addrindex", DEFAULT_ADDRINDEX);
     pblocktree->WriteFlag("addrindex", fAddrIndex);
     LogPrintf("Initializing databases...\n");
 
