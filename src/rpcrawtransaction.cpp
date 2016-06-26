@@ -1038,3 +1038,48 @@ UniValue getallbalance(const UniValue &params, bool fHelp)
 
     return ValueFromAmount(nBalance);
 }
+
+UniValue gethistory(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 1)
+        throw runtime_error("gethistory <address>\n");
+
+    if (!fAddrIndex)
+        throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
+
+    CBitcoinAddress address(params[0].get_str());
+    if (!address.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+    CTxDestination dest = address.Get();
+
+    std::set<CExtDiskTxPos> setpos;
+    if (!FindTransactionsByDestination(dest, setpos))
+        throw JSONRPCError(RPC_DATABASE_ERROR, "Cannot search for address");
+
+    std::set<CExtDiskTxPos>::const_iterator it = setpos.begin();
+
+    UniValue results(UniValue::VARR);
+    while (it != setpos.end()) {
+        CTransaction tx;
+        uint256 hashBlock;
+        if (!ReadTransaction(tx, *it, hashBlock))
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Cannot read transaction from disk");
+
+        int nHeight = 0;
+
+        BlockMap::iterator mi = mapBlockIndex.find(hashBlock);
+        if (mi != mapBlockIndex.end() && (*mi).second) {
+            CBlockIndex* pindex = (*mi).second;
+            if (chainActive.Contains(pindex)) {
+                nHeight = pindex->nHeight;
+                UniValue entry(UniValue::VOBJ);
+                entry.push_back(Pair("txid", tx.GetHash().GetHex()));
+                entry.push_back(Pair("blockheight", nHeight));
+                results.push_back(entry);
+            }
+        }
+
+        it++;
+    }
+    return results;
+}
